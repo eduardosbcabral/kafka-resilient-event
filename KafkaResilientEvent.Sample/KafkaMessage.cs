@@ -1,6 +1,6 @@
 ﻿namespace KafkaResilientEvent.Sample;
 
-record KafkaMessage : IKafkaMessage
+record KafkaMessage
 {
     public required string Text { get; init; }
 }

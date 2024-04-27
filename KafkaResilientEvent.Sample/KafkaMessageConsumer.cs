@@ -2,18 +2,19 @@
 
 namespace KafkaResilientEvent.Sample;
 
-internal class KafkaMessageProcessor(ILogger<KafkaMessageProcessor> logger) : IKafkaMessageProcessor<KafkaMessage>
+internal class KafkaMessageConsumer(ILogger<KafkaMessageConsumer> logger) : IConsumer<KafkaMessage>
 {
     public Task Consume(ConsumeContext<KafkaMessage> context)
     {
-        logger.LogInformation("KafkaMessageProcessor");
+        var retry = context.GetRetryAttempt();
+        logger.LogInformation("KafkaMessageConsumer");
 
         var payload = context.Message;
 
         if (payload.Text.Contains("error"))
         {
-            logger.LogError("KafkaMessageProcessor");
-            throw new Exception("KafkaMessageProcessor");
+            logger.LogError("KafkaMessageConsumer");
+            throw new Exception("KafkaMessageConsumer");
         }
 
         return Task.CompletedTask;

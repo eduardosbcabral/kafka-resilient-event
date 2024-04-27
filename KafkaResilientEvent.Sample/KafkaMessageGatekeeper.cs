@@ -2,7 +2,7 @@
 
 namespace KafkaResilientEvent.Sample;
 
-internal class KafkaMessageGatekeeper(ILogger<KafkaMessageGatekeeper> logger) : IKafkaMessageGatekeeper<KafkaMessage>
+internal class KafkaMessageGatekeeper(ILogger<KafkaMessageGatekeeper> logger)
 {
     public Task<bool> ShouldProcessMessage(ConsumeContext<KafkaMessage> context)
     {

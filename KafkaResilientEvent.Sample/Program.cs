@@ -1,9 +1,7 @@
-using KafkaResilientEvent;
 using KafkaResilientEvent.Sample;
 using KafkaResilientEvent.Settings;
 
 using MassTransit;
-using MassTransit.Middleware;
 
 var builder = Host.CreateApplicationBuilder(args);
 
@@ -15,16 +13,13 @@ ArgumentNullException.ThrowIfNull(kafkaSettings);
 ArgumentNullException.ThrowIfNull(retrySettings);
 ArgumentNullException.ThrowIfNull(circuitBreakerSettings);
 
-builder.Services.AddTransient<IKafkaMessageGatekeeper<KafkaMessage>, KafkaMessageGatekeeper>();
-builder.Services.AddTransient<IKafkaMessageProcessor<KafkaMessage>, KafkaMessageProcessor>();
-
 builder.Services.AddMassTransit(x =>
 {
     x.UsingInMemory();
 
     x.AddRider(rider =>
     {
-        rider.AddConsumer<KafkaMessageConsumer<KafkaMessage>>();
+        rider.AddConsumer<KafkaMessageConsumer>();
 
         rider.UsingKafka((context, k) =>
         {
@@ -32,7 +27,7 @@ builder.Services.AddMassTransit(x =>
 
             k.TopicEndpoint<KafkaMessage>(kafkaSettings.Topic, kafkaSettings.GroupId, e =>
             {
-                e.ConfigureConsumer<KafkaMessageConsumer<KafkaMessage>>(context);
+                e.ConfigureConsumer<KafkaMessageConsumer>(context);
                 e.UseConsumeFilter<DiscardMessageFilter>(context);
 
                 if (retrySettings.UseRetry)
@@ -49,9 +44,11 @@ builder.Services.AddMassTransit(x =>
 
                     if (retrySettings.UseRedelivery)
                     {
+                        // Não é possível implementar nativamente o redelivery com o Kafka na lib do Masstransit
                         e.UseDelayedRedelivery(r =>
                         {
-                            r.Intervals(retrySettings.RedeliveryIntervalsInMinutes.Select(x => TimeSpan.FromMinutes(x)).ToArray());
+                            //r.Intervals(retrySettings.RedeliveryIntervalsInMinutes.Select(x => TimeSpan.FromMinutes(x)).ToArray());
+                            r.Intervals([TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(30)]);
                         });
                     }
                 }
