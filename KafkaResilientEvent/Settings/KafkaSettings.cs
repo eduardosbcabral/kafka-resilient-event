@@ -1,10 +1,4 @@
 ﻿namespace KafkaResilientEvent.Settings;
 
-public class KafkaSettings
-{
-    public string BootstrapServers { get; set; }
-    public string GroupId { get; set; }
-    public string Topic { get; set; }
-    public string RetryTopic { get; set; }
-    public string DeadLetterTopic { get; set; }
-}
+public record KafkaSettings(string BootstrapServers, string GroupId, List<TopicSettings> Topics);
+public record TopicSettings(string Topic, string Retry, string DeadLetter);

@@ -1,21 +1,23 @@
-﻿using KafkaResilientEvent.Settings;
+﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+
+using Polly;
 
 namespace KafkaResilientEvent;
 
-public class KafkaWorker : BackgroundService
+internal class KafkaWorker : BackgroundService
 {
     private readonly ILogger<KafkaWorker> _logger;
-    private readonly KafkaConsumerService _kafkaConsumerService;
-    private readonly AppSettings _appSettings;
+
+    private readonly IEnumerableOfKeyd<ConsumerHandlerContext> _consumerHandlersContexts;
 
     public KafkaWorker(
         ILogger<KafkaWorker> logger,
-        KafkaConsumerService kafkaConsumerService,
-        AppSettings appSettings)
+        IEnumerableOfKeyd<ConsumerHandlerContext> consumerHandlersContexts)
     {
         _logger = logger;
-        _kafkaConsumerService = kafkaConsumerService;
-        _appSettings = appSettings;
+        _consumerHandlersContexts = consumerHandlersContexts;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -25,10 +27,12 @@ public class KafkaWorker : BackgroundService
         try
         {
             _logger.LogInformation("#2 KafkaWorker running at: {time}", DateTimeOffset.UtcNow);
-            var mainTopic = _kafkaConsumerService.ConsumeAsync(_appSettings.KafkaSettings.Topic, stoppingToken);
-            var retryTopic = _kafkaConsumerService.ConsumeAsync(_appSettings.KafkaSettings.RetryTopic, stoppingToken);
 
-            await Task.WhenAll(mainTopic, retryTopic);
+            var tasks = _consumerHandlersContexts.Select(x =>
+                Task.Run(() => x.ConsumerHandler.ConsumeAsync(x.Topic, stoppingToken), stoppingToken)
+            );
+
+            await Task.WhenAll(tasks);
         }
         catch (Exception ex)
         {
