@@ -1,5 +1,7 @@
-﻿namespace KafkaResilientEvent;
+﻿using MediatR;
 
-public interface IMessage
+namespace KafkaResilientEvent;
+
+public interface IMessage : IRequest
 {
 }

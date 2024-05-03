@@ -1,6 +1,7 @@
-﻿namespace KafkaResilientEvent;
+﻿using MediatR;
 
-public interface IConsumer<TMessage> where TMessage : IMessage
+namespace KafkaResilientEvent;
+
+public interface IConsumer<TKey, TValue> : IRequestHandler<ConsumeContext<TKey, TValue>>
 {
-    public Task Consume(ConsumeContext<TMessage> context, CancellationToken cancellationToken);
 }

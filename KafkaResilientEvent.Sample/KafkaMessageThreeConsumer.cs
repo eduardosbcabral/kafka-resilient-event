@@ -1,12 +1,14 @@
-﻿namespace KafkaResilientEvent.Sample;
+﻿using Confluent.Kafka;
 
-public class KafkaMessageThreeConsumer(ILogger<KafkaMessageThreeConsumer> logger) : IConsumer<KafkaMessageThree>
+namespace KafkaResilientEvent.Sample;
+
+public class KafkaMessageThreeConsumer(ILogger<KafkaMessageThreeConsumer> logger) : IConsumer<Ignore, KafkaMessageThree>
 {
-    public Task Consume(ConsumeContext<KafkaMessageThree> context, CancellationToken cancellationToken)
+    public Task Handle(ConsumeContext<Ignore, KafkaMessageThree> request, CancellationToken cancellationToken)
     {
         logger.LogInformation("KafkaMessageThreeConsumer");
 
-        var payload = context.Message;
+        var payload = request.Value;
 
         if (payload.Text.Contains("error"))
         {

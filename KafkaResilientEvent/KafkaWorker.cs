@@ -2,19 +2,17 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
-using Polly;
-
 namespace KafkaResilientEvent;
 
 internal class KafkaWorker : BackgroundService
 {
     private readonly ILogger<KafkaWorker> _logger;
 
-    private readonly IEnumerableOfKeyd<ConsumerHandlerContext> _consumerHandlersContexts;
+    private readonly IKeyEnumerable<ConsumerHandlerContext> _consumerHandlersContexts;
 
     public KafkaWorker(
         ILogger<KafkaWorker> logger,
-        IEnumerableOfKeyd<ConsumerHandlerContext> consumerHandlersContexts)
+        IKeyEnumerable<ConsumerHandlerContext> consumerHandlersContexts)
     {
         _logger = logger;
         _consumerHandlersContexts = consumerHandlersContexts;
@@ -29,7 +27,7 @@ internal class KafkaWorker : BackgroundService
             _logger.LogInformation("#2 KafkaWorker running at: {time}", DateTimeOffset.UtcNow);
 
             var tasks = _consumerHandlersContexts.Select(x =>
-                Task.Run(() => x.ConsumerHandler.ConsumeAsync(x.Topic, stoppingToken), stoppingToken)
+                x.Run(stoppingToken)
             );
 
             await Task.WhenAll(tasks);

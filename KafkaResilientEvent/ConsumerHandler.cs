@@ -1,9 +1,10 @@
 ﻿using Confluent.Kafka;
 
-using Microsoft.Extensions.DependencyInjection;
+using MediatR;
+
 using Microsoft.Extensions.Logging;
 
-using System.Reflection;
+using System.Text;
 using System.Text.Json;
 
 namespace KafkaResilientEvent;
@@ -11,37 +12,31 @@ namespace KafkaResilientEvent;
 public class ConsumerHandler
 {
     private readonly ILogger<ConsumerHandler> _logger;
-    private readonly IServiceProvider _serviceProvider;
+    private readonly IMediator _mediator;
     private readonly ConsumerConfig _consumerConfig;
-    private readonly JsonSerializerOptions _jsonSerializerOptions;
-    private readonly IDictionary<string, Type> _eventTypes;
+    private readonly Dictionary<string, KeyValuePair<Type, Type>> _eventTypes;
 
     public ConsumerHandler(
         ILogger<ConsumerHandler> logger,
-        IServiceProvider serviceProvider,
+        IMediator mediator,
         ConsumerConfig consumerConfig,
-        IDictionary<string, Type> eventTypes,
-        JsonSerializerOptions? jsonSerializerOptions = null)
+        Dictionary<string, KeyValuePair<Type, Type>> eventTypes)
     {
         _logger = logger;
-        _serviceProvider = serviceProvider;
+        _mediator = mediator;
         _consumerConfig = consumerConfig;
         _eventTypes = eventTypes;
-        _jsonSerializerOptions = jsonSerializerOptions ?? new()
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-        };
     }
 
     public async Task ConsumeAsync(string topic, CancellationToken cancellationToken)
     {
-        using var consumer = new ConsumerBuilder<Ignore, string>(_consumerConfig).Build();
+        using var consumer = new ConsumerBuilder<string, string>(_consumerConfig).Build();
         consumer.Subscribe(topic);
         _logger.LogInformation("Subscribed to topic: {Topic}", topic);
 
         while (!cancellationToken.IsCancellationRequested)
         {
-            ConsumeResult<Ignore, string>? consumerResult;
+            ConsumeResult<string, string>? consumerResult;
             try
             {
                 consumerResult = consumer.Consume(cancellationToken);
@@ -59,15 +54,19 @@ public class ConsumerHandler
 
             try
             {
-                var eventTypeStr = ConsumeContext<IMessage>.GetEventType(consumerResult.Message.Headers);
-                _eventTypes.TryGetValue(eventTypeStr, out var eventType);
+                var eventTypeStr = new ConsumeContext<string, string>(consumerResult.Message).GetEventType();
+                _eventTypes.TryGetValue(eventTypeStr, out var type);
 
-                var payload = (IMessage)(JsonSerializer.Deserialize(consumerResult.Message.Value, eventType, _jsonSerializerOptions) ?? throw new Exception(eventTypeStr));
-                object context = Activator.CreateInstance(typeof(ConsumeContext<>).MakeGenericType(eventType), consumerResult.Message.Key, payload);
-                var eventConsumer = _serviceProvider.GetRequiredKeyedService(typeof(IConsumer<>).MakeGenericType([eventType]), $"Consumer.{eventTypeStr}");
-                MethodInfo consumeMethod = eventConsumer.GetType().GetMethod("Consume");
-                var task = (Task)consumeMethod.Invoke(eventConsumer, [context, cancellationToken]);
-                await task.ConfigureAwait(false);
+                object key = consumerResult.Message.Key;
+
+                if (type.Key != typeof(Ignore) && type.Key != typeof(Null))
+                {
+                    key = JsonSerializer.Deserialize(consumerResult.Message.Key, type.Value);
+                }
+
+                var payload = JsonSerializer.Deserialize(consumerResult.Message.Value, type.Value);
+                var message = new ConsumeContext<object, object>(key, payload, consumerResult.Headers);
+                await _mediator.Send(message, cancellationToken);
             }
             catch (Exception ex)
             {

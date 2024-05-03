@@ -2,5 +2,5 @@
 
 public record KafkaMessageThree : IMessage
 {
-    public required string Text { get; init; }
+    public string Text { get; set; }
 }

@@ -1,6 +1,6 @@
 ﻿namespace KafkaResilientEvent;
 
-public interface IDiscardMessageFilter<TMessage> where TMessage : IMessage
-{
-    Task Execute(ConsumeContext<TMessage> context);
-}
+//public interface IDiscardMessageFilter<TMessage> where TMessage : IMessage
+//{
+//    Task Execute(ConsumeContext<TKey, TMessage> context);
+//}

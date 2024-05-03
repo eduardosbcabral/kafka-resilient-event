@@ -1,10 +1,10 @@
 ﻿using Confluent.Kafka;
 
 using KafkaResilientEvent;
-using KafkaResilientEvent.Settings;
+
+using MediatR;
 
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 
 using System.ComponentModel.DataAnnotations;
 
@@ -19,6 +19,18 @@ public static class KafkaDependencyInjection
         var builder = new ConfigureKafkaBuilder(services);
         configure(builder);
 
+        var handlers = services.Where(sd => sd.ServiceType == typeof(ConsumerHandlerContext));
+        services.AddTransient<IKeyEnumerable<ConsumerHandlerContext>>(p =>
+        {
+            var s = handlers.Select(x =>
+            {
+                return p.GetRequiredKeyedService<ConsumerHandlerContext>(x.ServiceKey);
+            });
+            return new KeyEnumerable<ConsumerHandlerContext>(s);
+        });
+
+        services.AddHostedService<KafkaWorker>();
+
         return services;
     }
 }
@@ -27,7 +39,6 @@ class ConfigureKafkaBuilder(IServiceCollection services) : IConfigureKafkaBuilde
 {
     [Required]
     public static string BootstrapServers { get; private set; } = string.Empty;
-    public static List<ConfigureTopicBuilder> ConfigureTopicBuilders { get; private set; } = [];
 
     public void Host(string bootstrapServers)
     {
@@ -43,37 +54,11 @@ class ConfigureKafkaBuilder(IServiceCollection services) : IConfigureKafkaBuilde
             AutoOffsetReset = AutoOffsetReset.Latest,
             EnableAutoCommit = false
         };
-        services.AddKeyedSingleton(consumerConfig, groupId);
 
         var builder = new ConfigureTopicBuilder(services, topic, consumerConfig);
         configure(builder);
-        ConfigureTopicBuilders.Add(builder);
-    }
 
-    public void ConfigureKafkaWorker()
-    {
-        RegisterKeyedEnumerable<string, ConsumerHandlerContext>(services);
-
-        services.AddHostedService<KafkaWorker>();
-    }
-
-    void RegisterKeyedEnumerable<TKey, T>(IServiceCollection serviceCollection)
-    {
-        var keys = serviceCollection
-            .Where(sd => sd.IsKeyedService && sd.ServiceType == typeof(T))
-            .Select(d => d.ServiceKey)
-            .Select(k => (TKey)k)
-            .ToList();
-
-        var a = serviceCollection
-            .Where(sd => sd.IsKeyedService && sd.ServiceType == typeof(T))
-            .ToList();
-
-        serviceCollection.AddTransient<IEnumerableOfKeyd<T>>(p =>
-        {
-            var values = keys.Select(k => p.GetRequiredKeyedService<T>(k));
-            return new EnumerableOfKeyd<T>(values);
-        });
+        builder.ConfigureConsumer();
     }
 }
 
@@ -81,56 +66,43 @@ public interface IConfigureKafkaBuilder
 {
     void Host(string bootstrapServers);
     void ConfigureTopic(string topic, string groupId, Action<IConfigureTopicBuilder> configure);
-    void ConfigureKafkaWorker();
 }
 
 class ConfigureTopicBuilder(IServiceCollection services, string topic, ConsumerConfig consumerConfig) : IConfigureTopicBuilder
 {
-    private IDictionary<string, Type> _eventTypes = new Dictionary<string, Type>();
-    public string Topic = topic;
+    private readonly Dictionary<string, KeyValuePair<Type, Type>> _eventTypes = [];
 
-    public void ConfigureConsumer<TMessage, TConsumer>()
-        where TMessage : IMessage
-        where TConsumer : IConsumer<TMessage>
+    public void ConfigureEvent<TKey, TValue>()
     {
-        var messageType = typeof(TMessage);
-        _eventTypes.Add(messageType.Name, messageType);
-        services.AddKeyedTransient(typeof(IConsumer<TMessage>), $"Consumer.{messageType.Name}", typeof(TConsumer));
+        var keyType = typeof(TKey);
+        var valueType = typeof(TValue);
+        _eventTypes.Add(valueType.Name, new(keyType, valueType));
     }
 
-    public void ConfigureHandler()
+    internal void ConfigureConsumer()
     {
-        services.AddKeyedTransient($"ConsumerHandlerContext.{Guid.NewGuid()}", (provider, _) =>
+        services.AddKeyedSingleton($"event-types.{topic}", _eventTypes);
+        services.AddKeyedTransient($"consumer-handler.{topic}", (provider, _) =>
         {
             var handler = new ConsumerHandler(
                 provider.GetRequiredService<ILogger<ConsumerHandler>>(),
-                provider,
+                provider.GetRequiredService<IMediator>(),
                 consumerConfig,
-                _eventTypes
+                provider.GetRequiredKeyedService<Dictionary<string, KeyValuePair<Type, Type>>>($"event-types.{topic}")
             );
-            return new ConsumerHandlerContext(handler, Topic);
+            return new ConsumerHandlerContext(handler, topic);
         });
     }
 }
 
 public interface IConfigureTopicBuilder
 {
-    void ConfigureConsumer<TMessage, TConsumer>() 
-        where TMessage : IMessage
-        where TConsumer : IConsumer<TMessage>;
-
-    /// <summary>
-    /// Call this method after configurating all consumers.
-    /// </summary>
-    void ConfigureHandler();
+    public void ConfigureEvent<TKey, TValue>();
 }
 
-class EnumerableOfKeyd<T> : List<T>, IEnumerableOfKeyd<T>
+class KeyEnumerable<T>(IEnumerable<T> values) : List<T>(values), IKeyEnumerable<T>
 {
-    public EnumerableOfKeyd(IEnumerable<T> values) : base(values)
-    {
-    }
 }
 
-interface IEnumerableOfKeyd<T> : IEnumerable<T> 
+interface IKeyEnumerable<T> : IEnumerable<T>
 { }

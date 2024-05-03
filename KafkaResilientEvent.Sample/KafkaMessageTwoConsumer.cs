@@ -1,12 +1,14 @@
-﻿namespace KafkaResilientEvent.Sample;
+﻿using Confluent.Kafka;
 
-public class KafkaMessageTwoConsumer(ILogger<KafkaMessageTwoConsumer> logger) : IConsumer<KafkaMessageTwo>
+namespace KafkaResilientEvent.Sample;
+
+public class KafkaMessageTwoConsumer(ILogger<KafkaMessageTwoConsumer> logger) : IConsumer<Ignore, KafkaMessageTwo>
 {
-    public Task Consume(ConsumeContext<KafkaMessageTwo> context, CancellationToken cancellationToken)
+    public Task Handle(ConsumeContext<Ignore, KafkaMessageTwo> request, CancellationToken cancellationToken)
     {
         logger.LogInformation("KafkaMessageTwoConsumer");
 
-        var payload = context.Message;
+        var payload = request.Value;
 
         if (payload.Text.Contains("error"))
         {

@@ -1,24 +1,28 @@
 ﻿using Confluent.Kafka;
 
+using MediatR;
+
 using System.Text;
 
 namespace KafkaResilientEvent;
 
-public class ConsumeContext<TMessage> : Message<Ignore, TMessage> where TMessage : IMessage
+public class ConsumeContext<TKey, TValue> : Message<TKey, TValue>, IRequest
 {
     public const string EVENT_TYPE_KEY = "event-type";
     public const string RETRY_COUNT_KEY = "retry-count";
 
-    public ConsumeContext(Message<Ignore, TMessage> message)
+    public ConsumeContext(Message<TKey, TValue> message)
     {
         Key = message.Key;
         Value = message.Value;
+        Headers = message.Headers;
     }
 
-    public ConsumeContext(Ignore key, TMessage value)
+    public ConsumeContext(TKey key, TValue value, Headers headers)
     {
         Key = key;
         Value = value;
+        Headers = headers;
     }
 
     public int GetRetryAttempt()
@@ -39,5 +43,5 @@ public class ConsumeContext<TMessage> : Message<Ignore, TMessage> where TMessage
         return header == null ? string.Empty : Encoding.UTF8.GetString(header.GetValueBytes());
     }
 
-    public TMessage Message => Value;
+    public TValue Message => Value;
 }
